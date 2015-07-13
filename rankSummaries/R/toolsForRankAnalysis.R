@@ -27,6 +27,34 @@
 ####								useRanks = should we be plotting confidence intervals for ranks or raw values?
 ####								... = additional arguments to be passed to plot(). So you can do something like 
 ####								plotConfIntervals(blah blah, xlab = 'trial number') and it will add a label to the x-axis
+
+rankAnalysis <- function(formula, data, orderedScoreNames, w = NULL){
+  adjustVar = TRUE
+  data[['rankScores']] <- fullRankProcessing(data, orderedScoreNames, weights = w)
+  if(length(formula) == 2) formula[[3]] <- formula[[2]]
+  formula[[2]] <- as.name('rankScores')
+  lmFit <- lm(formula, data = data)
+  ans <- new('rankAnalysisClass')
+  ans$rawData <- data
+  ans$rankValues <- data$rankScores
+  ans$coefficients <- lmFit$coef
+  ans$df <- lmFit$df.residual
+  if(!adjustVar){
+    ans$varianceMat <- vcov(lmFit)
+  }
+  else{
+    n <- nrow(lmFit$model)
+    xmat <- model.matrix(lmFit)
+    obsCorMat <- matrix(-1/n, nrow = n, ncol = n)
+    diag(obsCorMat) <- 1
+    obsVarMat <- obsCorMat * sum(lmFit$residuals^2)/ans$df
+    newVar <- solve(t(xmat) %*% xmat) %*% t(xmat) %*% obsVarMat %*% xmat %*% t( solve(t(xmat) %*% xmat))
+    ans$varianceMat <- newVar
+  }
+  return(ans)
+}
+
+
 	
 fullRankProcessing <- function(fullData, orderedValueNames, weights = NULL){
 	rankValues <- getRankValues(fullData, orderedValueNames)
@@ -52,11 +80,10 @@ getRankValues <- function(data, orderedVarNames, p_rank = TRUE){
 }
 
 getMeanRankVals <- function(rankData, orderedRankNames, w = NULL){
-	if(!is.null(w))
-		if(length(w) != length(orderedRankNames))	stop('length(rankNames) != length(w)')
+  if(is.null(w))
+    w = rep(1, ncol(rankDataOnly))
+	if(length(w) != length(orderedRankNames))	stop('length(rankNames) != length(w)')
 	rankDataOnly <- rankData[orderedRankNames]
-	if(is.null(w))
-		w = rep(1, ncol(rankDataOnly))
 	sumVals = as.numeric(w %*% t(as.matrix(rankDataOnly))) / sum(w)
 	return(sumVals)
 }
@@ -103,3 +130,21 @@ plotConfIntervals <- function(fullData, orderedVarNames, grpName,
 		}
 	}	
 }
+
+
+rankAnalysisClass <- setRefClass('rankAnalysisClass',
+                                 fields = c('coefficients', 'varianceMat', 'rankValues', 'rawData', 'df'),
+                                 methods = list(
+                                   makeSummary = function(){
+                                   betas <- coefficients
+                                   se <- sqrt(diag(varianceMat))
+                                   tval <- betas / se
+                                   pval <- 2 * pt(-abs(tval), df = df)
+                                   ans <- data.frame(Estimate = coefficients, SE = se, t_value = tval, p_value = pval)
+                                   return(ans)
+                                 },
+                                 show = function(){
+                                   print(makeSummary())
+                                 }))
+
+summary.rankAnalysisClass <- function(fit) fit$makeSummary()
