@@ -147,4 +147,4 @@ rankAnalysisClass <- setRefClass('rankAnalysisClass',
                                    print(makeSummary())
                                  }))
 
-summary.rankAnalysisClass <- function(fit) fit$makeSummary()
+summary.rankAnalysisClass <- function(object, ...) object$makeSummary()

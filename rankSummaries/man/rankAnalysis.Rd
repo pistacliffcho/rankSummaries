@@ -21,7 +21,15 @@
 } 
   
 \examples{
-	}
+  data(MWM_data)
+  outcomeNames <- paste0('LATENCY_', 1:12)    #creating names of outcomes in data
+  fit <- rankAnalysis(formula = ~ hAPP + cohort,
+                      data = MWM_data,
+                      orderedScoreNames = outcomeNames,
+                      w = 1:12)
+  
+  summary(fit)
+}
 \author{
   Clifford Anderson-Bergman
 }
