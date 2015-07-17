@@ -80,10 +80,10 @@ getRankValues <- function(data, orderedVarNames, p_rank = TRUE){
 }
 
 getMeanRankVals <- function(rankData, orderedRankNames, w = NULL){
+  rankDataOnly <- rankData[orderedRankNames]
   if(is.null(w))
     w = rep(1, ncol(rankDataOnly))
 	if(length(w) != length(orderedRankNames))	stop('length(rankNames) != length(w)')
-	rankDataOnly <- rankData[orderedRankNames]
 	sumVals = as.numeric(w %*% t(as.matrix(rankDataOnly))) / sum(w)
 	return(sumVals)
 }
@@ -91,7 +91,7 @@ getMeanRankVals <- function(rankData, orderedRankNames, w = NULL){
 
 plotConfIntervals <- function(fullData, orderedVarNames, grpName, 
 							  cols = c('blue', 'red'), grpLvls = levels(factor(fullData[[grpName]])),
-							  useRanks = T, 
+							  useRanks = T, ylow = NULL, yhi = NULL, 
 							  ...){
 	xLimits <- c(0.5, length(orderedVarNames) + 0.5)
 	if(length(cols) != length(grpLvls))	stop('number of colors must match number of grpLvls')
@@ -115,20 +115,27 @@ plotConfIntervals <- function(fullData, orderedVarNames, grpName,
 	}
 	
 	yLimits <- c(min(as.numeric(ci.l)), max(as.numeric(ci.h)))
+	if(!is.null(ylow)) yLimits[1] <- ylow
+	if(!is.null(yhi))  yLimits[2] <- yhi
 	plot(NA, xlim = xLimits, ylim = yLimits, ...)
-	
+	theseMeans <- matrix(ncol = length(orderedVarNames), nrow = grp_k)
 	for(i in seq_along(orderedVarNames)){
 		vn <- orderedVarNames[i]
 		for(j in 1:grp_k){
 			ci.l[j,i] -> thisLower
 			ci.h[j,i] -> thisUpper
 			thisMean <- (thisUpper + thisLower) /2
+			theseMeans[j,i] <- thisMean
 			lines(c(i + j/10, i+j/10) , c(thisLower, thisUpper), col = cols[j])
 			lines(c(i-0.2+j/10, i+0.2+j/10), c(thisLower, thisLower), col = cols[j])
 			lines(c(i-0.2+j/10, i+0.2+j/10), c(thisUpper, thisUpper), col = cols[j])
-			lines(c(i-0.1+j/10, i+0.1+j/10), c(thisMean, thisMean), col = cols[j])
+	#		lines(c(i-0.1+j/10, i+0.1+j/10), c(thisMean, thisMean), col = cols[j])
 		}
 	}	
+for(i in 1:grp_k){
+  thisCol <- cols[i]
+  lines(1:length(orderedVarNames) + i/10, theseMeans[i,], col = cols[i], type = 'b', pch = 16)
+  }
 }
 
 

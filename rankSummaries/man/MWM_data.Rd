@@ -14,7 +14,9 @@
  }
 \examples{
   data(MWM_data)
-  outcomeNames <- paste0('LATENCY_', 1:12)    #creating names of outcomes in data
+  outcomeNames <- names(MWM_data)[3:14]   
+  #variables 3-14 in dataset correspond with outcome variables
+
   fit <- rankAnalysis(formula = ~ hAPP + cohort,
                       data = MWM_data,
                       orderedScoreNames = outcomeNames,
