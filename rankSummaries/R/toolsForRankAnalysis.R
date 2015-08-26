@@ -29,7 +29,7 @@
 ####								plotConfIntervals(blah blah, xlab = 'trial number') and it will add a label to the x-axis
 
 rankAnalysis <- function(formula, data, orderedScoreNames, w = NULL){
-  adjustVar = TRUE
+  adjustVar = T
   data[['rankScores']] <- fullRankProcessing(data, orderedScoreNames, weights = w)
   if(length(formula) == 2) formula[[3]] <- formula[[2]]
   formula[[2]] <- as.name('rankScores')
@@ -39,16 +39,20 @@ rankAnalysis <- function(formula, data, orderedScoreNames, w = NULL){
   ans$rankValues <- data$rankScores
   ans$coefficients <- lmFit$coef
   ans$df <- lmFit$df.residual
-  if(!adjustVar){
+  ans$.lmFit <- lmFit
+    if(!adjustVar){
     ans$varianceMat <- vcov(lmFit)
   }
   else{
     n <- nrow(lmFit$model)
     xmat <- model.matrix(lmFit)
-    obsCorMat <- matrix(-1/n, nrow = n, ncol = n)
+    obsCorMat <- matrix(-1/(n-1), nrow = n, ncol = n)
+    
+    obsCorMat <- obsCorMat * 0
+    
     diag(obsCorMat) <- 1
-    obsVarMat <- obsCorMat * sum(lmFit$residuals^2)/ans$df
-    newVar <- solve(t(xmat) %*% xmat) %*% t(xmat) %*% obsVarMat %*% xmat %*% t( solve(t(xmat) %*% xmat))
+    obsVarMat <- obsCorMat * sum(lmFit$residuals^2)/(ans$df+1)
+    newVar <- solve(t(xmat) %*% xmat) %*% (t(xmat) %*% obsVarMat %*% xmat) %*% t( solve(t(xmat) %*% xmat))
     ans$varianceMat <- newVar
   }
   return(ans)
@@ -71,8 +75,9 @@ getRankValues <- function(data, orderedVarNames, p_rank = TRUE){
 		rN <- paste(vN, 'rank', sep = '_')
 		if(!is.numeric(data[[vN]]))		stop('values are not numeric!')
 		theseRanks <- rank(data[[vN]], ties = 'average')
-		if(p_rank)
+		if(p_rank){
 			theseRanks <- theseRanks/length(theseRanks)
+		}
 		output[[rN]] <- theseRanks
 	}
 	output$DUMMYVAR = NULL
@@ -91,7 +96,8 @@ getMeanRankVals <- function(rankData, orderedRankNames, w = NULL){
 
 plotConfIntervals <- function(fullData, orderedVarNames, grpName, 
 							  cols = c('blue', 'red'), grpLvls = levels(factor(fullData[[grpName]])),
-							  useRanks = T, ylow = NULL, yhi = NULL, 
+							  useRanks = T, ylow = NULL, yhi = NULL, errorSummary = 'ci',
+							  useTrialNums = NULL, adj_x = 0.05,
 							  ...){
 	xLimits <- c(0.5, length(orderedVarNames) + 0.5)
 	if(length(cols) != length(grpLvls))	stop('number of colors must match number of grpLvls')
@@ -101,6 +107,11 @@ plotConfIntervals <- function(fullData, orderedVarNames, grpName,
 	
 	grpId <- fullData[[grpName]]
 	
+	z <- NA
+	if(errorSummary == 'ci') z <- 1.96
+	else if (errorSummary == 'se') z <- 1
+	else stop('errorSummary not recognized. Options = "ci" or "se"')
+	
 	for(i in seq_along(orderedVarNames)){
 		vn <- orderedVarNames[i]
 		theseVals <- fullData[[vn]]
@@ -109,8 +120,8 @@ plotConfIntervals <- function(fullData, orderedVarNames, grpName,
 			grpVals <- theseVals[grpId == grpLvls[j] ]
 			thisMean <- mean(grpVals, na.rm = TRUE)
 			thisSE <- sd(grpVals, na.rm = TRUE)/sqrt(length(grpVals))
-			ci.l[j,i] <- thisMean - 1.96 * thisSE
-			ci.h[j,i] <- thisMean + 1.96 * thisSE
+			ci.l[j,i] <- thisMean - z * thisSE
+			ci.h[j,i] <- thisMean + z * thisSE
 		}
 	}
 	
@@ -119,28 +130,36 @@ plotConfIntervals <- function(fullData, orderedVarNames, grpName,
 	if(!is.null(yhi))  yLimits[2] <- yhi
 	plot(NA, xlim = xLimits, ylim = yLimits, ...)
 	theseMeans <- matrix(ncol = length(orderedVarNames), nrow = grp_k)
-	for(i in seq_along(orderedVarNames)){
+
+	plotVals <- 1:grp_k
+	if(!is.null(useTrialNums)) plotVals <- useTrialNums
+	
+	
+		for(i in seq_along(orderedVarNames)){
 		vn <- orderedVarNames[i]
 		for(j in 1:grp_k){
 			ci.l[j,i] -> thisLower
 			ci.h[j,i] -> thisUpper
 			thisMean <- (thisUpper + thisLower) /2
 			theseMeans[j,i] <- thisMean
-			lines(c(i + j/10, i+j/10) , c(thisLower, thisUpper), col = cols[j])
-			lines(c(i-0.2+j/10, i+0.2+j/10), c(thisLower, thisLower), col = cols[j])
-			lines(c(i-0.2+j/10, i+0.2+j/10), c(thisUpper, thisUpper), col = cols[j])
+			lines(c(i + j * adj_x, i+j * adj_x) , c(thisLower, thisUpper), col = cols[j])
+			lines(c(i-0.2+j * adj_x, i+0.2+j * adj_x), c(thisLower, thisLower), col = cols[j])
+			lines(c(i-0.2+j * adj_x, i+0.2+j * adj_x), c(thisUpper, thisUpper), col = cols[j])
 	#		lines(c(i-0.1+j/10, i+0.1+j/10), c(thisMean, thisMean), col = cols[j])
 		}
-	}	
-for(i in 1:grp_k){
+	}
+for(i.c in seq_along(plotVals)){
+  i <- plotVals[i.c]
   thisCol <- cols[i]
-  lines(1:length(orderedVarNames) + i/10, theseMeans[i,], col = cols[i], type = 'b', pch = 16)
+  lines(1:length(orderedVarNames) + i * adj_x, theseMeans[i,], col = cols[i], type = 'b', pch = 16)
   }
 }
 
 
 rankAnalysisClass <- setRefClass('rankAnalysisClass',
-                                 fields = c('coefficients', 'varianceMat', 'rankValues', 'rawData', 'df'),
+                                 fields = c('coefficients', 'varianceMat', 
+                                            'rankValues', 'rawData', 'df',
+                                            '.lmFit'),
                                  methods = list(
                                    makeSummary = function(){
                                    betas <- coefficients
@@ -155,3 +174,51 @@ rankAnalysisClass <- setRefClass('rankAnalysisClass',
                                  }))
 
 summary.rankAnalysisClass <- function(object, ...) object$makeSummary()
+
+
+
+
+getFactorCoef <- function(coefs, factorName, levelName){
+  cNames <- names(coefs)
+  factorInd <- which(grepl(factorName, cNames) & grepl(levelName, cNames))
+  if(length(factorInd) != 1){
+    cat('factor name = ', factorName, 'level name = ', levelName, 'matches = ', cNames[factorInd])
+    stop('number of factors found not equal to 1. Could be that level name is not unique (or subset of another phrase)')
+  }
+  return(coefs[factorInd])
+}
+
+
+
+makeQuantCuts <- function(vals, 
+                          percentiles = c(0,0.25,0.5,0.75,1), 
+                          numeric_ans = TRUE){
+  cutVals <- quantile(vals, percentiles)
+  ans <- cut(vals, cutVals)
+  if(numeric_ans) ans <- as.numeric(ans)
+  return(ans)
+}
+
+
+adjustForCohort <- function(scores, fit, varName = 'cohort'){
+  unadjustedScores <- scores
+  if(is(fit, 'rankAnalysisClass') ){
+    varLevels <- levels(fit$rawData[[varName]])
+    dataSet <- fit$rawData
+  }
+  if(is(fit, 'lm')){
+    varLevels <- fit$xlevels[[varName]]
+    dataSet <- fit$model
+  }
+    adjustedScores <- unadjustedScores
+
+    if(length(varLevels) > 1){
+      for(i in 2:length(varLevels)){
+        lvl = varLevels[i]
+        thisCoef <- getFactorCoef(fit$coefficients, varName, lvl)
+        theseInds <- dataSet[[varName]] == lvl
+        adjustedScores[theseInds] <- adjustedScores[theseInds] - thisCoef
+      }
+    }
+  return(adjustedScores)
+}
